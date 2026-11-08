@@ -1,0 +1,17 @@
+{
+    "name": "learning/expense-tracker",
+    "description": "Learning backend development with Slim",
+    "type": "project",
+    "require": {
+        "php": "^8.4",
+        "slim/slim": "^4.0",
+        "slim/psr7": "^1.0",
+        "ext-pdo": "*",
+        "ext-pdo_sqlite": "*"
+    },
+    "autoload": {
+        "psr-4": {
+            "App\\": "src/"
+        }
+    }
+}
