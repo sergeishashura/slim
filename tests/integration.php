@@ -4,13 +4,10 @@ declare(strict_types=1);
 
 require __DIR__ . '/../vendor/autoload.php';
 
-use App\Expense\Application\CreateExpense;
-use App\Expense\Application\GetExpense;
 use App\Expense\Domain\Expense;
 use App\Expense\Domain\ExpenseCategory;
-use App\Expense\Http\CreateExpenseAction;
-use App\Expense\Http\GetExpenseAction;
 use App\Expense\Infrastructure\Persistence\PdoExpenseRepository;
+use DI\ContainerBuilder;
 use Slim\Factory\AppFactory;
 use Slim\Psr7\Factory\ServerRequestFactory;
 
@@ -30,13 +27,12 @@ try {
     $pdo = $connect();
     $pdo->exec(file_get_contents(__DIR__ . '/../migrations/001_create_expenses.sql'));
     $repository = new PdoExpenseRepository($pdo);
-    $app = AppFactory::create();
-    (require __DIR__ . '/../config/routes.php')(
-        $app,
-        new CreateExpenseAction(new CreateExpense($repository)),
-        new GetExpenseAction(new GetExpense($repository)),
-        $repository,
-    );
+    $builder = new ContainerBuilder();
+    $builder->addDefinitions(__DIR__ . '/../config/dependencies.php');
+    $container = $builder->build();
+    $container->set(PDO::class, $pdo);
+    $app = AppFactory::create(container: $container);
+    (require __DIR__ . '/../config/routes.php')($app);
     $send = static function (string $method, string $path, string $body = '', string $type = 'application/json') use ($app) {
         $request = (new ServerRequestFactory())->createServerRequest($method, $path)->withHeader('Content-Type', $type);
         $request->getBody()->write($body);
