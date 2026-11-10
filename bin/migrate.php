@@ -2,29 +2,40 @@
 
 declare(strict_types=1);
 
-$pdo = new PDO('sqlite:' . dirname(__DIR__) . '/var/database.sqlite', null, null, [
-    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-]);
-$pdo->exec('PRAGMA busy_timeout = 5000');
-$pdo->exec('CREATE TABLE IF NOT EXISTS migrations (name TEXT PRIMARY KEY)');
-$files = glob(dirname(__DIR__) . '/migrations/*.sql');
+$pdo = (require __DIR__ . '/../config/database.php')();
+$mysql = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql';
+$pdo->exec('CREATE TABLE IF NOT EXISTS migrations (name VARCHAR(255) PRIMARY KEY)');
+$directory = dirname(__DIR__) . '/migrations' . ($mysql ? '/mysql' : '');
+$files = glob($directory . '/*.sql');
+$find = $pdo->prepare('SELECT name FROM migrations WHERE name = ?');
+$record = $pdo->prepare($mysql
+    ? 'INSERT INTO migrations (name) VALUES (?) ON DUPLICATE KEY UPDATE name = name'
+    : 'INSERT INTO migrations (name) VALUES (?)');
 sort($files);
 foreach ($files as $file) {
     $name = basename($file);
-    $pdo->beginTransaction();
+    // MySQL commits DDL automatically, so its migration files must be safe to retry.
+    if (!$mysql) {
+        $pdo->beginTransaction();
+    }
     try {
-        $statement = $pdo->prepare('SELECT name FROM migrations WHERE name = ?');
-        $statement->execute([$name]);
-        if ($statement->fetchColumn() !== false) {
-            $pdo->commit();
-            continue;
+        $find->execute([$name]);
+        $applied = $find->fetchColumn() !== false;
+        $find->closeCursor();
+        if (!$applied) {
+            $pdo->exec(file_get_contents($file));
+            $record->execute([$name]);
         }
-        $pdo->exec(file_get_contents($file));
-        $pdo->prepare('INSERT INTO migrations (name) VALUES (?)')->execute([$name]);
-        $pdo->commit();
-        echo "Applied: $name\n";
+        if (!$mysql) {
+            $pdo->commit();
+        }
+        if (!$applied) {
+            echo "Applied: $name\n";
+        }
     } catch (Throwable $exception) {
-        $pdo->rollBack();
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
         throw $exception;
     }
 }

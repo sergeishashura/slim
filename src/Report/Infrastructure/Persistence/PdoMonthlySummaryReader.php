@@ -19,13 +19,18 @@ final readonly class PdoMonthlySummaryReader implements MonthlySummaryReaderInte
             SELECT
                 (SELECT COALESCE(SUM(amount), 0)
                  FROM income
-                 WHERE received_at BETWEEN :from AND :through) AS income,
+                 WHERE received_at BETWEEN :income_from AND :income_through) AS income,
                 (SELECT COALESCE(SUM(amount), 0)
                  FROM expenses
-                 WHERE spent_at BETWEEN :from AND :through) AS expenses
+                 WHERE spent_at BETWEEN :expense_from AND :expense_through) AS expenses
             SQL
         );
-        $statement->execute(['from' => $from, 'through' => $through]);
+        $statement->execute([
+            'income_from' => $from,
+            'income_through' => $through,
+            'expense_from' => $from,
+            'expense_through' => $through,
+        ]);
         $totals = $statement->fetch(PDO::FETCH_ASSOC);
 
         return new MonthlySummary(
